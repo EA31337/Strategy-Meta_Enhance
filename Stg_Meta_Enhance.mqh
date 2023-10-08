@@ -9,25 +9,25 @@
 
 // User input params.
 INPUT2_GROUP("Meta Enhance strategy: main params");
-INPUT2 ENUM_STRATEGY Meta_Enhance_Strategy = STRAT_ATR;  // Strategy to reverse signals
-INPUT2_GROUP("Meta Enhance strategy: common params");
-INPUT2 float Meta_Enhance_LotSize = 0;                // Lot size
-INPUT2 int Meta_Enhance_SignalOpenMethod = 0;         // Signal open method
-INPUT2 float Meta_Enhance_SignalOpenLevel = 0;        // Signal open level
-INPUT2 int Meta_Enhance_SignalOpenFilterMethod = 32;  // Signal open filter method
-INPUT2 int Meta_Enhance_SignalOpenFilterTime = 3;     // Signal open filter time (0-31)
-INPUT2 int Meta_Enhance_SignalOpenBoostMethod = 0;    // Signal open boost method
-INPUT2 int Meta_Enhance_SignalCloseMethod = 0;        // Signal close method
-INPUT2 int Meta_Enhance_SignalCloseFilter = 32;       // Signal close filter (-127-127)
-INPUT2 float Meta_Enhance_SignalCloseLevel = 0;       // Signal close level
-INPUT2 int Meta_Enhance_PriceStopMethod = 0;          // Price limit method
-INPUT2 float Meta_Enhance_PriceStopLevel = 2;         // Price limit level
-INPUT2 int Meta_Enhance_TickFilterMethod = 32;        // Tick filter method (0-255)
-INPUT2 float Meta_Enhance_MaxSpread = 4.0;            // Max spread to trade (in pips)
-INPUT2 short Meta_Enhance_Shift = 0;                  // Shift
-INPUT2 float Meta_Enhance_OrderCloseLoss = 30;        // Order close loss
-INPUT2 float Meta_Enhance_OrderCloseProfit = 30;      // Order close profit
-INPUT2 int Meta_Enhance_OrderCloseTime = -10;         // Order close time in mins (>0) or bars (<0)
+INPUT2 ENUM_STRATEGY Meta_Enhance_Strategy = STRAT_OSCILLATOR_TREND;  // Strategy to reverse signals
+INPUT3_GROUP("Meta Enhance strategy: common params");
+INPUT3 float Meta_Enhance_LotSize = 0;                // Lot size
+INPUT3 int Meta_Enhance_SignalOpenMethod = 0;         // Signal open method
+INPUT3 float Meta_Enhance_SignalOpenLevel = 0;        // Signal open level
+INPUT3 int Meta_Enhance_SignalOpenFilterMethod = 32;  // Signal open filter method
+INPUT3 int Meta_Enhance_SignalOpenFilterTime = 3;     // Signal open filter time (0-31)
+INPUT3 int Meta_Enhance_SignalOpenBoostMethod = 0;    // Signal open boost method
+INPUT3 int Meta_Enhance_SignalCloseMethod = 0;        // Signal close method
+INPUT3 int Meta_Enhance_SignalCloseFilter = 32;       // Signal close filter (-127-127)
+INPUT3 float Meta_Enhance_SignalCloseLevel = 0;       // Signal close level
+INPUT3 int Meta_Enhance_PriceStopMethod = 0;          // Price limit method
+INPUT3 float Meta_Enhance_PriceStopLevel = 2;         // Price limit level
+INPUT3 int Meta_Enhance_TickFilterMethod = 32;        // Tick filter method (0-255)
+INPUT3 float Meta_Enhance_MaxSpread = 4.0;            // Max spread to trade (in pips)
+INPUT3 short Meta_Enhance_Shift = 0;                  // Shift
+INPUT3 float Meta_Enhance_OrderCloseLoss = 30;        // Order close loss
+INPUT3 float Meta_Enhance_OrderCloseProfit = 30;      // Order close profit
+INPUT3 int Meta_Enhance_OrderCloseTime = -10;         // Order close time in mins (>0) or bars (<0)
 
 // Structs.
 
@@ -49,11 +49,14 @@ struct Stg_Meta_Enhance_Params_Defaults : StgParams {
 
 class Stg_Meta_Enhance : public Strategy {
  protected:
+  bool should_enhance;
+  ChartEntry centry;
   Ref<Strategy> strat;
+  Trade strade;
 
  public:
   Stg_Meta_Enhance(StgParams &_sparams, TradeParams &_tparams, ChartParams &_cparams, string _name = "")
-      : Strategy(_sparams, _tparams, _cparams, _name) {}
+      : Strategy(_sparams, _tparams, _cparams, _name), strade(_tparams, _cparams) {}
 
   static Stg_Meta_Enhance *Init(ENUM_TIMEFRAMES _tf = NULL, EA *_ea = NULL) {
     // Initialize strategy initial values.
@@ -276,10 +279,58 @@ class Stg_Meta_Enhance : public Strategy {
   }
 
   /**
+   * Event on new time periods.
+   */
+  virtual void OnPeriod(unsigned int _periods = DATETIME_NONE) {
+    if ((_periods & DATETIME_DAY) != 0) {
+      // New day started.
+      should_enhance = false;
+    }
+  }
+
+  /**
+   * Event on strategy's order open.
+   */
+  virtual void OnOrderOpen(OrderParams &_oparams) {
+    // @todo: EA31337-classes/issues/723
+    Strategy::OnOrderOpen(_oparams);
+    if (strat.IsSet()) {
+      Chart *_chart = trade.GetChart();
+      centry = _chart.GetEntry();
+      should_enhance = true;
+      // BarOHLC _ohlc[2];
+      //_ohlc[0] = _chart.GetOHLC(_ishift);
+    }
+  }
+
+  /**
+   * Gets price stop value.
+   */
+  float PriceStop(ENUM_ORDER_TYPE _cmd, ENUM_ORDER_TYPE_VALUE _mode, int _method = 0, float _level = 0.0f,
+                  short _bars = 4) {
+    float _result = 0;
+    uint _shift = 0;
+    if (_method == 0) {
+      // Ignores calculation when method is 0.
+      return (float)_result;
+    }
+    if (!strat.IsSet()) {
+      // Returns false when strategy is not set.
+      return (float)_result;
+    }
+    _level = _level == 0.0f ? strat.Ptr().Get<float>(STRAT_PARAM_SOL) : _level;
+    _method = strat.Ptr().Get<int>(STRAT_PARAM_SOM);
+    //_shift = _shift == 0 ? _strat_ref.Ptr().Get<int>(STRAT_PARAM_SHIFT) : _shift;
+    _result = strat.Ptr().PriceStop(_cmd, _mode, _method, _level /*, _shift*/);
+    return (float)_result;
+  }
+
+  /**
    * Check strategy's opening signal.
    */
   bool SignalOpen(ENUM_ORDER_TYPE _cmd, int _method, float _level = 0.0f, int _shift = 0) {
     bool _result = true;
+    Chart *_chart = trade.GetChart();
     if (!strat.IsSet()) {
       // Returns false when strategy is not set.
       return false;
@@ -288,6 +339,28 @@ class Stg_Meta_Enhance : public Strategy {
     _method = _method == 0 ? strat.Ptr().Get<int>(STRAT_PARAM_SOM) : _method;
     _shift = _shift == 0 ? strat.Ptr().Get<int>(STRAT_PARAM_SHIFT) : _shift;
     _result &= strat.Ptr().SignalOpen(_cmd, _method, _level, _shift);
+    if (_result) {
+      should_enhance = false;
+    } else if (should_enhance) {
+      ChartEntry _centry_curr = _chart.GetEntry(_shift);
+      BarEntry _bentry_curr = _centry_curr.GetBar();
+      BarEntry _bentry_prev = centry.GetBar();
+      BarOHLC _ohlc_curr = _bentry_curr.GetOHLC();
+      BarOHLC _ohlc_prev = _bentry_prev.GetOHLC();
+      switch (_cmd) {
+        case ORDER_TYPE_BUY:
+          // Buy signal.
+          _result = _ohlc_curr.GetHigh() < _ohlc_prev.GetLow();
+          break;
+        case ORDER_TYPE_SELL:
+          // Sell signal.
+          _result = _ohlc_curr.GetLow() > _ohlc_prev.GetHigh();
+          break;
+      }
+      if (_result) {
+        should_enhance = false;
+      }
+    }
     return _result;
   }
 
