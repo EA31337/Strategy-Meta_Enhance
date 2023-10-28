@@ -72,7 +72,7 @@ class Stg_Meta_Enhance : public Strategy {
   /**
    * Event on strategy's init.
    */
-  void OnInit() { StrategyAdd(Meta_Enhance_Strategy); }
+  void OnInit() { StrategyAdd(Meta_Enhance_Strategy, 0); }
 
   /**
    * Sets strategy.
