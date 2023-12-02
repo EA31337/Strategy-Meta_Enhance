@@ -9,7 +9,7 @@
 
 // User input params.
 INPUT2_GROUP("Meta Enhance strategy: main params");
-INPUT2 ENUM_STRATEGY Meta_Enhance_Strategy = STRAT_OSCILLATOR_TREND;  // Strategy to reverse signals
+INPUT2 ENUM_STRATEGY Meta_Enhance_Strategy = STRAT_CHAIKIN;  // Strategy to reverse signals
 INPUT3_GROUP("Meta Enhance strategy: common params");
 INPUT3 float Meta_Enhance_LotSize = 0;                // Lot size
 INPUT3 int Meta_Enhance_SignalOpenMethod = 0;         // Signal open method
